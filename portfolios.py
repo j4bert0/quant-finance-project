@@ -1,10 +1,10 @@
 '''
 Functions for wrangling CRSP data. 
 
-Quantile portfolios. Portfolio returns. Summary table.
+Quantile portfolios. Portfolio returns. Summary table. Plots.
 '''
 
-import utils
+from utils import threadify
 
 import pandas as pd
 import numpy as np
@@ -21,11 +21,11 @@ def lag_return_permno(data,n,permno):
     for lag in range(1,n+1):
         col = 'LRET_{}'.format(lag)
         permno_data[col] = permno_data['RET'].shift(lag)
-    return permno_data.iloc[3:]
+    return permno_data.iloc[n:-n]
 
 def lag_returns(data,n):
     # Adds lagged returns (up to n lags) of each stock to the dataset.
-    # Loses n first observations for each stock.
+    # Loses n first and last observations for each stock.
     permnos = data['PERMNO'].unique()
     dfs = threadify(lambda permno: lag_return_permno(data,n,permno),permnos)
     return pd.concat(dfs, ignore_index=True)
@@ -70,7 +70,7 @@ def portfolios_for_date(data,breakpoints,date,wrt):
     # Helper for form_portfolios
     df = data.loc[data['date'] == date]
     name = 'PORT_' + str(wrt)
-    df[name] = df['ME'].map(lambda e: assign_portfolio(breakpoints,date,e))
+    df[name] = df[wrt].map(lambda e: assign_portfolio(breakpoints,date,e))
     print("{} ".format(date), end='')
     return df
 
@@ -102,7 +102,6 @@ def portfolios_summary_table(data,wrt):
     df = pd.DataFrame(threadify(lambda d: portfolios_summary_month(data,d,wrt),dates)).set_index('date')
     return df.sort_index(axis=1)
 
-
 '''
 Returns
 '''
@@ -122,3 +121,23 @@ def portfolios_returns_mean_table(data,wrt,n):
     dates = data['date'].unique()
     returns = threadify(lambda e: portfolios_returns_mean(data,e,wrt,n),dates)
     return pd.DataFrame(returns).set_index('date')
+
+'''
+Plots
+'''
+
+def plot_cumulative(returns,log_scale=False):
+    # Plots DataFrame of portfolios returns.
+    c_returns = returns.copy()
+    n = len(c_returns.columns)
+    c_returns.loc['0'] = [0] * n
+    df = (1 + c_returns.sort_index()).cumprod()
+    return df.plot(title='Cumulative returns of portfolios',logy=log_scale,figsize=(10,6))
+
+def plot_returns(returns):
+    return returns.plot(title='Returns of portfolios',figsize=(10,6))
+
+def plot_boxplot(returns):
+    return returns.boxplot(title='Boxplot of portfolios',figsize=(10,6))
+
+    
