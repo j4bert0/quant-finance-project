@@ -11,6 +11,15 @@ import numpy as np
 
 pd.options.mode.chained_assignment = None
 
+
+'''
+Filter universe
+'''
+
+def filter_me(data,n):
+    # Removes n smallest deciles (10%) by market equity from data
+    pass
+
 '''
 Lagging returns
 '''
@@ -40,7 +49,7 @@ def quantiles_for_date(data,wrt,date,n):
     data = data.loc[data['date'] == date]
     qs = [q/100 for q in range(r,100+r,r)]
     breakpoints = [np.quantile(data[wrt].values,q) for q in qs]
-    return {**{'date':date}, **dict(zip(range(1,r+1),breakpoints))}
+    return {**{'date':date}, **dict(zip(range(1,n+1),breakpoints))}
 
 def quantile_table(data,wrt,n):
     # Returns DataFrame of quantile breakpoints with respect to variable (wrt).
@@ -87,19 +96,42 @@ def form_portfolios(data,wrt,n):
     print('Done. Execution time: {}s'.format(round(time.time()-start,3)))
     return pd.concat(dfs, ignore_index=True)
 
+"""
+Portfolio for date (for debugging)
+"""
+
+def portfolio_for_date(assignned_data,date,wrt,n):
+    # Assumes assigned data (data with portfolios 'PORT_...' variable).
+    # Returns table of stocks of the portfolio.
+    pass
+
 '''
 Summary tables
 '''
 
-def portfolios_summary_month(data,date,wrt):
-    # Helper for portfolios_summary_table
+def portfolios_size_summary_month(data,date,wrt):
+    # Helper for portfolios_size_summary
     name = 'PORT_' + str(wrt)
     return {**{'date':date}, **data.loc[data['date'] == date][name].value_counts().to_dict()}
 
-def portfolios_summary_table(data,wrt):
+def portfolios_size_summary(data,wrt):
     # Returns DataFrame. For each date the number of stocks in the quantile portfolios.
     dates = data['date'].unique()
-    df = pd.DataFrame(threadify(lambda d: portfolios_summary_month(data,d,wrt),dates)).set_index('date')
+    df = pd.DataFrame(threadify(lambda d: portfolios_size_summary_month(data,d,wrt),dates)).set_index('date')
+    return df.sort_index(axis=1)
+
+def portfolios_me_summary_month(data,date,wrt,n):
+    # Helper for portfolios_me_summary
+    name = 'PORT_' + str(wrt)
+    d = {'date':date}
+    for i in range(1,n+1):
+        d[i] = data.loc[(data['date'] == date) & (data[name] == i)]['ME'].values.mean()
+    return d
+
+def portfolios_me_summary(data,wrt,n):
+    # Returns DataFrame. For each date the average market equity in the quantile portfolios.
+    dates = data['date'].unique()
+    df = pd.DataFrame(threadify(lambda d: portfolios_me_summary_month(data,d,wrt,n),dates)).set_index('date')
     return df.sort_index(axis=1)
 
 '''
