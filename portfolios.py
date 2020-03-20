@@ -16,9 +16,16 @@ pd.options.mode.chained_assignment = None
 Filter universe
 '''
 
+def filter_me_date(data,date,n):
+    # Helper for filter_me
+    return data.loc[(data['date'] == date) & (data['PORT_ME'] > n)]
+
 def filter_me(data,n):
     # Removes n smallest deciles (10%) by market equity from data
-    pass
+    dates = data['date'].unique()
+    assigned_data = form_portfolios(data,'ME',10)
+    dfs = threadify(lambda d: filter_me_date(assigned_data,d,n),dates)
+    return pd.concat(dfs, ignore_index=True).drop('PORT_ME',1)
 
 '''
 Lagging returns
@@ -100,10 +107,12 @@ def form_portfolios(data,wrt,n):
 Portfolio for date (for debugging)
 """
 
-def portfolio_for_date(assignned_data,date,wrt,n):
+def portfolio_at_date(assigned_data,date,wrt,n):
     # Assumes assigned data (data with portfolios 'PORT_...' variable).
     # Returns table of stocks of the portfolio.
-    pass
+    name = 'PORT_' + str(wrt)
+    portfolio = assigned_data.loc[(assigned_data['date'] == date) & (assigned_data[name] == n)]
+    return portfolio[['TICKER','COMNAM',wrt,'RET']]
 
 '''
 Summary tables
@@ -158,11 +167,15 @@ def portfolios_returns_mean_table(data,wrt,n):
 Plots
 '''
 
-def plot_cumulative(returns,log_scale=False):
+def plot_cumulative(returns,log_scale=False,portfolios=[]):
     # Plots DataFrame of portfolios returns.
-    c_returns = returns.copy()
-    n = len(c_returns.columns)
-    c_returns.loc['0'] = [0] * n
+    s = len(portfolios)
+    if s == 0:
+        c_returns = returns.copy()
+        s = len(returns.columns)
+    else:
+        c_returns = returns
+    c_returns.loc['0'] = [0] * s
     df = (1 + c_returns.sort_index()).cumprod()
     return df.plot(title='Cumulative returns of portfolios',logy=log_scale,figsize=(10,6))
 
