@@ -167,14 +167,19 @@ def portfolios_returns_mean_table(data,wrt,n):
 Plots
 '''
 
-def plot_cumulative(returns,log_scale=False,portfolios=[]):
-    # Plots DataFrame of portfolios returns.
+def plot_cumulative(returns,log_scale=False,portfolios=[],market=[]):
+    # Plots DataFrame of portfolios time series returns.
+    # portfolios: plots only given portfolios
+    # market: DataFrame of market returns. If given, plotted.
     s = len(portfolios)
-    if s == 0:
+    if s > 0:
+        c_returns = returns[portfolios]
+    else:
         c_returns = returns.copy()
         s = len(returns.columns)
-    else:
-        c_returns = returns
+    if len(market) > 0: 
+        s += 1
+        c_returns['Market'] = market.iloc[returns.index]['vwretd']
     c_returns.loc['0'] = [0] * s
     df = (1 + c_returns.sort_index()).cumprod()
     return df.plot(title='Cumulative returns of portfolios',logy=log_scale,figsize=(10,6))
