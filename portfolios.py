@@ -1,10 +1,12 @@
 '''
-Functions for wrangling CRSP data. 
+Functions for wrangling CRSP data to quantile portfolios. 
 
 Quantile portfolios. Portfolio returns. Summary table. Plots.
 '''
 
 from utils import threadify
+import positions as pos
+from dataio import ret_table, vol_table
 
 import pandas as pd
 import numpy as np
@@ -87,7 +89,7 @@ def portfolios_for_date(data,breakpoints,date,wrt):
     df = data.loc[data['date'] == date]
     name = 'PORT_' + str(wrt)
     df[name] = df[wrt].map(lambda e: assign_portfolio(breakpoints,date,e))
-    print("{} ".format(date), end='')
+    print('.', end='')
     return df
 
 import time
@@ -96,7 +98,7 @@ def form_portfolios(data,wrt,n):
     # Returns DataFrame (in CRSP form). Each stock assigned into quantile portfolio with
     # respect to variable (wrt). Total n quantile portfolios.
     start = time.time()
-    print('Progress...')
+    print('Progress')
     breakpoints = quantile_table(data,wrt,n)
     dates = data['date'].unique()
     dfs = threadify(lambda d: portfolios_for_date(data,breakpoints,d,wrt),dates)
@@ -104,15 +106,31 @@ def form_portfolios(data,wrt,n):
     return pd.concat(dfs, ignore_index=True)
 
 """
-Portfolio for date (for debugging)
+Positions
 """
 
-def portfolio_at_date(assigned_data,date,wrt,n):
+def portfolio_at_date_d(assigned_data,date,wrt,n):
+    # For debugging
+    #   
     # Assumes assigned data (data with portfolios 'PORT_...' variable).
     # Returns table of stocks of the portfolio.
     name = 'PORT_' + str(wrt)
     portfolio = assigned_data.loc[(assigned_data['date'] == date) & (assigned_data[name] == n)]
     return portfolio[['TICKER','COMNAM',wrt,'RET']]
+
+def portfolio_positions_date(assigned_data,date,name,n):
+    # Helper for portfolio_positions
+    df = assigned_data.loc[(assigned_data['date'] == date) & (assigned_data[name] == n)]
+    return {'date': date, 'pos': df['PERMNO'].values}
+
+def pos_table(assigned_data,portfolio,n):
+    # Returns positions table
+    dates = assigned_data['date'].unique()
+    rows = threadify(lambda d: portfolio_positions_date(assigned_data,d,portfolio,n),dates)
+    return pd.DataFrame(rows).set_index('date').sort_index()
+
+def pos_from_table_at_date(pos_table,date):
+    return pos_table.loc[date].values[0]
 
 '''
 Summary tables
@@ -163,6 +181,28 @@ def portfolios_returns_mean_table(data,wrt,n):
     returns = threadify(lambda e: portfolios_returns_mean(data,e,wrt,n),dates)
     return pd.DataFrame(returns).set_index('date')
 
+def ret_from_table_at_date(ret_table,pos,date):
+    return ret_table[pos].loc[date].values
+
+def compute_strategy_returns(assigned_data,portfolio,n,sizing='equal'):
+    rtable = ret_table(assigned_data)
+    vtable = vol_table(rtable,6)
+    positions = pos_table(assigned_data,portfolio,n)
+    dates = assigned_data['date'].unique()
+
+    rets = []
+    for d in dates:
+        pos_d = pos_from_table_at_date(positions,d)
+        r = ret_from_table_at_date(rtable,pos_d,d)
+        if sizing == 'equal': s = pos.equal_weights(pos_d,d)
+        elif sizing == 'optimized': s = pos.optimized(pos_d,rtable,1/(2*len(pos_d)),d)
+        elif sizing == 'vol_scaled': s = pos.vol_scaled_weights(pos_d,vtable,d)
+        elif sizing == 'inv_vol_scaled': s = pos.inv_vol_scaled_weights(pos_d,vtable,d)
+        rets.append({'date':d, 'RET': np.dot(r,s)})
+
+    return pd.DataFrame(rets)
+
+
 '''
 Plots
 '''
@@ -176,7 +216,7 @@ def plot_cumulative(returns,log_scale=False,market=[]):
         s += 1
         c_returns['Market'] = market.iloc[returns.index]['vwretd']
     c_returns.loc['0'] = [0] * s
-    df = (1 + c_returns.sort_index()).cumprod()
+    df = (1 + c_returns).cumprod()
     return df.plot(title='Cumulative returns of portfolios',logy=log_scale,figsize=(10,6))
 
 def plot_returns(returns):
